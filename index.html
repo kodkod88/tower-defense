@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tower Defense</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏰</text></svg>"
+    />
+    <style>
+      /* Theme tokens. Mirrored in src/render/theme.ts; tests/render/theme.test.ts keeps them in sync. */
+      :root {
+        --color-bg: #16120d;
+        --color-bg-deep: #0d0a07;
+        --color-panel: #2a2117;
+        --color-panel-raised: #3a2d1f;
+        --color-border: #5c4630;
+        --color-border-light: #8f6d45;
+        --color-text: #f2e6cc;
+        --color-text-dim: #b3a080;
+        --color-gold: #f0c04a;
+        --color-gold-deep: #a87a24;
+        --color-danger: #e0533d;
+        --color-success: #8cc44e;
+        --color-info: #62b4ea;
+        --color-grass: #4d7a35;
+        --color-grass-light: #679a48;
+        --color-grass-dark: #3a6127;
+        --color-dirt: #b38955;
+        --color-dirt-light: #cfa673;
+        --color-dirt-dark: #76522f;
+        --color-stone: #8c857a;
+        --color-stone-light: #b9b2a3;
+        --color-stone-dark: #4f4a43;
+        --color-ink: #1b140e;
+        --font-family: 'Trebuchet MS', 'Segoe UI', system-ui, -apple-system, sans-serif;
+        --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+        --font-size-xs: 11px;
+        --font-size-sm: 13px;
+        --font-size-md: 16px;
+        --font-size-lg: 20px;
+        --font-size-xl: 28px;
+        --font-size-display: 52px;
+        --radius-sm: 4px;
+        --radius-md: 8px;
+        --radius-lg: 14px;
+
+        /* Derived (CSS only) */
+        --panel-bg: linear-gradient(180deg, var(--color-panel-raised), var(--color-panel));
+        --panel-shadow: 0 1px 0 rgba(255, 230, 180, 0.08) inset, 0 6px 18px rgba(0, 0, 0, 0.45);
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        color: var(--color-text);
+        font-family: var(--font-family);
+        font-size: var(--font-size-md);
+      }
+      body {
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+        background:
+          radial-gradient(ellipse at 50% 35%, var(--color-panel) 0%, transparent 70%),
+          var(--color-bg-deep);
+      }
+      button {
+        font: inherit;
+        color: inherit;
+      }
+      button:focus-visible {
+        outline: 2px solid var(--color-gold);
+        outline-offset: 2px;
+      }
+
+      #app {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 12px 0;
+      }
+
+      /* ---------- HUD ---------- */
+      .hud {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 52px;
+        padding: 8px 10px;
+        background: var(--panel-bg);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        box-shadow: var(--panel-shadow);
+        font-size: var(--font-size-lg);
+        font-weight: 700;
+      }
+      .hud-title {
+        display: flex;
+        flex-direction: column;
+        padding: 0 12px 0 4px;
+        border-right: 1px solid var(--color-border);
+        color: var(--color-gold);
+        font-size: var(--font-size-md);
+        line-height: 1.1;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        text-shadow: 0 1px 0 var(--color-ink);
+      }
+      .hud-title small {
+        color: var(--color-text-dim);
+        font-size: var(--font-size-xs);
+        font-weight: 400;
+        letter-spacing: 0.1em;
+      }
+      .hud-stat.hud-stat--lives {
+        padding-left: 14px;
+      }
+      .hud-stat {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 14px 4px 6px;
+        background: rgba(0, 0, 0, 0.28);
+        border: 1px solid rgba(0, 0, 0, 0.35);
+        border-radius: 999px;
+        box-shadow: 0 1px 0 rgba(255, 230, 180, 0.06);
+        text-shadow: 0 1px 0 var(--color-ink);
+        font-variant-numeric: tabular-nums;
+      }
+      .hud-icon {
+        flex: none;
+        width: 26px;
+        height: 26px;
+        filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
+      }
+      .hud-money {
+        color: var(--color-gold);
+      }
+      .hud-lives {
+        color: var(--color-danger);
+      }
+      .hud-wave {
+        color: var(--color-text);
+      }
+      .hud-progress {
+        width: 72px;
+        height: 6px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.5);
+      }
+      .hud-progress[hidden] {
+        display: none;
+      }
+      .hud-progress-fill {
+        width: 0%;
+        height: 100%;
+        background: linear-gradient(90deg, var(--color-gold-deep), var(--color-gold));
+        transition: width 120ms linear;
+      }
+      .hud-stat.is-hit {
+        animation: hud-hit 450ms ease-out;
+      }
+      @keyframes hud-hit {
+        0% {
+          transform: translateX(0);
+          background: rgba(224, 83, 61, 0.8);
+        }
+        15% {
+          transform: translateX(-5px);
+        }
+        30% {
+          transform: translateX(5px);
+        }
+        45% {
+          transform: translateX(-3px);
+        }
+        60% {
+          transform: translateX(2px);
+        }
+        100% {
+          transform: translateX(0);
+          background: rgba(0, 0, 0, 0.28);
+        }
+      }
+      .hud-start {
+        margin-left: auto;
+        padding: 8px 18px;
+        color: var(--color-ink);
+        font-size: var(--font-size-md);
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        background: linear-gradient(180deg, var(--color-gold), var(--color-gold-deep));
+        border: 1px solid var(--color-ink);
+        border-radius: var(--radius-md);
+        box-shadow:
+          0 1px 0 rgba(255, 255, 255, 0.35) inset,
+          0 3px 0 var(--color-ink);
+        cursor: pointer;
+        transition:
+          transform 80ms,
+          box-shadow 80ms,
+          filter 120ms;
+      }
+      .hud-start:hover:not(:disabled) {
+        filter: brightness(1.1);
+      }
+      .hud-start:active:not(:disabled) {
+        transform: translateY(2px);
+        box-shadow:
+          0 1px 0 rgba(255, 255, 255, 0.35) inset,
+          0 1px 0 var(--color-ink);
+      }
+      .hud-start:disabled {
+        color: var(--color-text-dim);
+        background: var(--color-panel);
+        border-color: var(--color-border);
+        box-shadow: none;
+        cursor: not-allowed;
+      }
+
+      /* ---------- Stage (framed canvas) ---------- */
+      #stage {
+        position: relative;
+        padding: 6px;
+        background: linear-gradient(180deg, var(--color-border-light), var(--color-border));
+        border-radius: var(--radius-lg);
+        box-shadow:
+          0 0 0 1px var(--color-ink),
+          0 12px 32px rgba(0, 0, 0, 0.6);
+      }
+      canvas {
+        display: block;
+        max-width: calc(100vw - 12px);
+        border-radius: calc(var(--radius-lg) - 6px);
+        background: var(--color-grass-dark);
+      }
+      #stage::after {
+        content: '';
+        position: absolute;
+        inset: 6px;
+        border-radius: calc(var(--radius-lg) - 6px);
+        pointer-events: none;
+        opacity: 0;
+      }
+      #stage.is-hit::after {
+        animation: stage-hit 500ms ease-out;
+      }
+      @keyframes stage-hit {
+        0% {
+          opacity: 1;
+          box-shadow: inset 0 0 70px 14px rgba(224, 83, 61, 0.8);
+        }
+        100% {
+          opacity: 0;
+          box-shadow: inset 0 0 70px 14px rgba(224, 83, 61, 0);
+        }
+      }
+
+      /* ---------- Toolbar (tower cards) ---------- */
+      .toolbar {
+        display: flex;
+        align-items: stretch;
+        gap: 10px;
+      }
+      .toolbar > button {
+        display: grid;
+        grid-template-columns: 48px 1fr;
+        grid-template-rows: auto auto;
+        align-items: center;
+        column-gap: 10px;
+        row-gap: 4px;
+        min-width: 230px;
+        padding: 8px 12px 8px 8px;
+        text-align: left;
+        background: var(--panel-bg);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        box-shadow: var(--panel-shadow);
+        cursor: pointer;
+        transition:
+          transform 100ms,
+          border-color 100ms,
+          box-shadow 100ms;
+      }
+      .toolbar > button:hover {
+        transform: translateY(-2px);
+        border-color: var(--color-border-light);
+      }
+      .toolbar > button.selected {
+        border-color: var(--color-gold);
+        box-shadow:
+          0 0 0 1px var(--color-gold),
+          0 0 18px rgba(240, 192, 74, 0.35),
+          var(--panel-shadow);
+      }
+      .toolbar > button.unaffordable {
+        opacity: 0.6;
+        filter: grayscale(0.7);
+      }
+      .toolbar > button.unaffordable .card-cost {
+        color: var(--color-danger);
+      }
+      .card-icon {
+        grid-row: 1 / span 2;
+        width: 48px;
+        height: 48px;
+        border-radius: var(--radius-sm);
+        background: radial-gradient(
+          circle at 50% 40%,
+          var(--color-grass-light),
+          var(--color-grass-dark)
+        );
+        box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.4);
+      }
+      .card-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .card-key {
+        display: inline-grid;
+        place-items: center;
+        min-width: 22px;
+        height: 20px;
+        padding: 0 3px;
+        color: var(--color-ink);
+        font-family: var(--font-mono);
+        font-size: var(--font-size-xs);
+        font-weight: 700;
+        background: var(--color-text-dim);
+        border-radius: var(--radius-sm);
+      }
+      .card-name {
+        font-size: var(--font-size-md);
+        font-weight: 700;
+      }
+      .card-cost {
+        margin-left: auto;
+        padding-left: 10px;
+        color: var(--color-gold);
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+      }
+      .card-stats {
+        display: flex;
+        gap: 14px;
+      }
+      .card-stat {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.15;
+      }
+      .card-stat-label {
+        color: var(--color-text-dim);
+        font-size: 9px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+      .card-stat-value {
+        font-size: var(--font-size-sm);
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+      }
+      .toolbar-hint {
+        align-self: center;
+        margin-left: auto;
+        color: var(--color-text-dim);
+        font-size: var(--font-size-xs);
+        line-height: 1.8;
+        text-align: right;
+      }
+      .toolbar-hint kbd {
+        padding: 0 5px;
+        font-family: var(--font-mono);
+        background: rgba(0, 0, 0, 0.3);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-sm);
+      }
+
+      /* ---------- Win / lose overlay ---------- */
+      .overlay {
+        position: absolute;
+        inset: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: calc(var(--radius-lg) - 6px);
+        background: radial-gradient(ellipse at center, rgba(13, 10, 7, 0.5), rgba(13, 10, 7, 0.88));
+        text-align: center;
+        animation: overlay-in 300ms ease-out;
+      }
+      .overlay[hidden] {
+        display: none;
+      }
+      .overlay-panel {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        min-width: 380px;
+        padding: 26px 44px 30px;
+        background: var(--panel-bg);
+        border: 2px solid var(--color-border-light);
+        border-radius: var(--radius-lg);
+        box-shadow:
+          0 0 0 4px var(--color-ink),
+          0 20px 50px rgba(0, 0, 0, 0.7);
+        animation: panel-in 380ms cubic-bezier(0.2, 1.4, 0.4, 1);
+      }
+      .overlay-emblem {
+        width: 72px;
+        height: 72px;
+        filter: drop-shadow(0 3px 0 var(--color-ink));
+      }
+      .overlay h1 {
+        margin: 0;
+        font-size: var(--font-size-display);
+        letter-spacing: 0.04em;
+        text-shadow:
+          0 3px 0 var(--color-ink),
+          0 0 24px currentColor;
+      }
+      .overlay p {
+        margin: 0;
+        color: var(--color-text-dim);
+        font-size: var(--font-size-md);
+      }
+      .overlay[data-kind='won'] h1 {
+        color: var(--color-gold);
+      }
+      .overlay[data-kind='won'] .overlay-panel {
+        border-color: var(--color-gold);
+      }
+      .overlay[data-kind='lost'] h1 {
+        color: var(--color-danger);
+      }
+      .overlay[data-kind='lost'] .overlay-panel {
+        border-color: var(--color-danger);
+      }
+      .overlay button {
+        margin-top: 18px;
+        padding: 10px 34px;
+        color: var(--color-ink);
+        font-size: var(--font-size-lg);
+        font-weight: 700;
+        background: linear-gradient(180deg, var(--color-gold), var(--color-gold-deep));
+        border: 1px solid var(--color-ink);
+        border-radius: var(--radius-md);
+        box-shadow:
+          0 1px 0 rgba(255, 255, 255, 0.35) inset,
+          0 3px 0 var(--color-ink);
+        cursor: pointer;
+      }
+      .overlay button:hover {
+        filter: brightness(1.1);
+      }
+      @keyframes overlay-in {
+        from {
+          opacity: 0;
+        }
+      }
+      @keyframes panel-in {
+        from {
+          opacity: 0;
+          transform: scale(0.85) translateY(12px);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="hud"></div>
+      <div id="stage">
+        <canvas id="game" width="960" height="640"></canvas>
+      </div>
+      <div id="toolbar"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
